@@ -1,6 +1,7 @@
 import re
 import sys
 import os
+import configparser
 
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import (QWidget, QApplication, QDesktopWidget, QMessageBox, QSizePolicy, \
@@ -18,24 +19,28 @@ class DHCP(QWidget):
 
     def initUI(self):
         self.data = ''
-        self.configs = {}
         self.dictLineEdit = {}
+        self.conf = configparser.ConfigParser(comment_prefixes=("#"))
 
         self.vbox = QVBoxLayout()
         self.gridMain = QGridLayout() 
         self.gridConfigs = QGridLayout()
-        self.pathConfigFile = QLineEdit("/etc/dhcp/dhcpd.conf")
-    
+        self.pathConfigFile = QLineEdit("dhcp.conf")
+        self.dhcpServiceName = QLineEdit("dhcpd")
         label = QLabel( "Config file" )
         self.gridMain.addWidget(label, *(0, 0))
         self.gridMain.addWidget(self.pathConfigFile, *(0, 1), 1, 2)
+
+        label = QLabel( "DHCP-server service name" )
+        self.gridMain.addWidget(label, *(1, 0))
+        self.gridMain.addWidget(self.dhcpServiceName, *(1, 1), 1, 2)
         
         readButton = QPushButton("Read config")
         saveButton = QPushButton("Save config and Restart DHCP-server")
         readButton.clicked.connect(self.read_config)
         saveButton.clicked.connect(self.save_config)
-        self.gridMain.addWidget(readButton, *(1, 1))
-        self.gridMain.addWidget(saveButton, *(1, 2))
+        self.gridMain.addWidget(readButton, *(2, 1))
+        self.gridMain.addWidget(saveButton, *(2, 2))
        
         self.vbox.addLayout(self.gridMain)
 
@@ -52,122 +57,102 @@ class DHCP(QWidget):
         self.setSizePolicy(sizePolicy)
         self.show()
 
+
+    def MakeLine(self):
+        
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setFrameShadow(QFrame.Sunken)
+        return line
+
+        
     def UIconfig(self):
-        
-        self.ClearWindow()
-        
-        row = 0 #gridConfigsLayout rows count
-        for items in self.configs.items():
-            label = QLabel( str(items[0]) )
-            if items[0] == "option domain-name-servers":
-                self.gridConfigs.addWidget(label, *(row, 0))
-                count = 1
-                for line in items[1]:
-                    textEdit = QLineEdit( line )
-                    self.dictLineEdit[ items[0] + str(count) ] = textEdit
+
+        row =0
+        for section in self.conf.sections():
+            if section == "simple":
+                for item in self.conf.items(section):
+                    label = QLabel( str(item[0]) )
+                    self.gridConfigs.addWidget(label, *(row, 0))
+
+                    textEdit = QLineEdit( item[1] )
+                    self.dictLineEdit[ section + " " + str(item[0]) ] = textEdit
                     self.gridConfigs.addWidget(textEdit, *(row, 1), 1, 2)
                     row += 1
-                    count += 1
-                    
-            # for subnet part in config file
-            elif "subnet " in items[0]:
-                self.gridConfigs.addWidget( QLabel(items[0]), *(row, 0) )
-                row += 1
-                self.gridConfigs.addWidget( QLabel("subnet"), *(row, 0) )
-                
-                textEdit = QLineEdit( items[0].split(' ')[1] )
-                self.dictLineEdit[ items[0] ] = textEdit
-                self.gridConfigs.addWidget( textEdit, *(row, 1), 1, 2 ) 
-                row += 1
-
-                label = QLabel( "netmask" );
-                self.gridConfigs.addWidget( label, *(row, 0))
-                
-                textEdit = QLineEdit( items[1][0] )
-                self.dictLineEdit[ "netmask "+items[0] ] = textEdit
-                self.gridConfigs.addWidget( textEdit, *(row, 1), 1, 2 )
-                row += 1
-
-                for j in range( 1, len(items[1]), 2 ):
-                    self.gridConfigs.addWidget( QLabel("range"), *(row, 0) )
-                    textEdit = QLineEdit( items[1][j] )
-                    key = "range "+items[0]+" "+str(j)
-                    self.dictLineEdit[ key ] = textEdit
-                    self.gridConfigs.addWidget( textEdit, *(row, 1) )
-
-                    textEdit = QLineEdit( items[1][j+1] )
-                    key = "range "+items[0]+" "+str(j+1)
-                    self.dictLineEdit[ key ] = textEdit
-                    self.gridConfigs.addWidget( textEdit, *(row, 2) )
+                    self.gridConfigs.addWidget(self.MakeLine(), *(row, 0), 1, 3)
                     row += 1
                     
-            # for hosts part in config file        
-            elif "host " in items[0]:
-                self.gridConfigs.addWidget( QLabel(items[0]), *(row, 0) )
+            elif section == "option domain-name-servers":
+                self.gridConfigs.addWidget(QLabel("option domain-name-servers"), *(row, 0))
                 row += 1
-                self.gridConfigs.addWidget( QLabel("host"), *(row, 0) )
-
-                textEdit = QLineEdit( items[0].split(' ')[1] )
-                self.dictLineEdit[ items[0] ] = textEdit
-                self.gridConfigs.addWidget( textEdit, *(row, 1), 1, 2 )
+                for item in self.conf.items(section):
+                    label = QLabel( str(item[0]) )
+                    self.gridConfigs.addWidget(label, *(row, 0))
+                    
+                    textEdit = QLineEdit( item[1] )
+                    self.dictLineEdit[ section + " " + str(item[0])] = textEdit
+                    self.gridConfigs.addWidget(textEdit, *(row, 1), 1, 2)
+                    row += 1
+                self.gridConfigs.addWidget(self.MakeLine(), *(row, 0), 1, 3)
                 row += 1
-
-                label = QLabel( "hardware ethernet" );
-                self.gridConfigs.addWidget( label, *(row, 0))
-
-                textEdit = QLineEdit( items[1][0] )
-                key = "hardware ethernet " + items[0]
-                self.dictLineEdit[ key ] = textEdit
-                self.gridConfigs.addWidget( textEdit, *(row, 1), 1, 2 )
+                    
+            elif "subnet " in section:
+                self.gridConfigs.addWidget(QLabel(section), *(row, 0))
                 row += 1
+                flag_first = True
+                for item in self.conf.items(section):
+                    label = QLabel( str(item[0]) )
+                    self.gridConfigs.addWidget(label, *(row, 0))
+                    if flag_first == True:
+                        textEdit = QLineEdit( item[1] )
+                        self.dictLineEdit[ section + " " + str(item[0]) ] = textEdit
+                        self.gridConfigs.addWidget(textEdit, *(row, 1), 1, 2)
+                        flag_first = None
+                    else:                        
+                        #print("item[1].split(' ') =>", item[1].split(' '))
+                        ranges = item[1].split(' ')[0]
+                        ranges = re.sub(',', '', ranges)
+                        textEdit = QLineEdit( ranges )
+                        self.dictLineEdit[ section + " " + str(item[0]) + "1"] = textEdit
+                        self.gridConfigs.addWidget(textEdit, *(row, 1), 1, 1)
 
-                label = QLabel( "fixed-address" );
-                self.gridConfigs.addWidget( label, *(row, 0))
-
-                textEdit = QLineEdit( items[1][1] )
-                key = "fixed-address " + items[0]
-                self.dictLineEdit[ key ] = textEdit
-                self.gridConfigs.addWidget( textEdit, *(row, 1), 1, 2 )
+                        ranges = item[1].split(' ')[1]
+                        ranges = re.sub(',', '', ranges)
+                        textEdit = QLineEdit( ranges )
+                        self.dictLineEdit[ section + " " + str(item[0]) + "2"] = textEdit
+                        self.gridConfigs.addWidget(textEdit, *(row, 2), 1, 1)
+                    row += 1
+                self.gridConfigs.addWidget(self.MakeLine(), *(row, 0), 1, 3)
+                row += 1      
+                    
+            elif "host " in section:
+                self.gridConfigs.addWidget(QLabel(section), *(row, 0))
                 row += 1
+                for item in self.conf.items(section):
+                    label = QLabel( str(item[0]) )
+                    self.gridConfigs.addWidget(label, *(row, 0))
 
-            # for simple configs in config file
-            else:
-                self.gridConfigs.addWidget(label, *(row, 0))
+                    textEdit = QLineEdit( item[1] )
+                    self.dictLineEdit[ section + " " + str(item[0]) ] = textEdit
+                    self.gridConfigs.addWidget(textEdit, *(row, 1), 1, 2)
+                    row += 1
+                self.gridConfigs.addWidget(self.MakeLine(), *(row, 0), 1, 3)
+                row += 1  
 
-                textEdit = QLineEdit( str(items[1]) )
-                self.dictLineEdit[ label.text() ] = textEdit
-                self.gridConfigs.addWidget(textEdit, *(row, 1), 1, 2)
-                
-            row += 1
-            line = QFrame();
-            line.setFrameShape(QFrame.HLine);
-            line.setFrameShadow(QFrame.Sunken);
-            
-            self.gridConfigs.addWidget(line, *(row, 0), 1, 3)
-            row += 1
-            
         self.vbox.addLayout(self.gridConfigs)
-
         self.resize(1, 1)
-        #self.resize(1, 1)
-
-    # delete old Labels and LineEdits if it exist
+        
+# delete old Labels and LineEdits if it exist
     def ClearWindow(self):
        if self.gridConfigs.rowCount() > 1:
             while self.gridConfigs.itemAt(0) != None:
                 tmp_widget = self.gridConfigs.itemAt(0).widget()
                 self.gridConfigs.removeItem(self.gridConfigs.itemAt(0))
                 tmp_widget.setParent(None)
-       
-    def center(self):
 
-        qr = self.frameGeometry()
-        cp = QDesktopWidget().availableGeometry().center()
-        qr.moveCenter(cp)
-        self.move(qr.topLeft())
-
+                
     def find_simple_config(self):
-
+        self.conf.add_section('simple')
         for str in self.data.split('\n'):
             
             if len( str ) < 2:
@@ -189,20 +174,18 @@ class DHCP(QWidget):
             if len( tmp ) > 2:
                 if tmp[0] == "option":
                     configs_key = tmp[0]                
-                    configs_key += ' ' + tmp[1]                
-                    configs_values = []
-                    if tmp[1] == "domain-name-servers":                    
+                    configs_key += ' ' + tmp[1] 
+                    if tmp[1] == "domain-name-servers":
+                        self.conf.add_section('option domain-name-servers')
                         for i in range(2, len(tmp)):
                             tmp[i] = re.sub('[,;"]', '', tmp[i])
-                            configs_values.append(tmp[i])                        
-                        self.configs[configs_key] = configs_values
+                            self.conf.set('option domain-name-servers', "{0}{1}".format("server", i-1), tmp[i])
                     else:
                         tmp[2] = re.sub('[,;]', '', tmp[2])
-                        self.configs[configs_key] = tmp[2] 
+                        self.conf.set('simple', configs_key, tmp[2] )
             else:
                 tmp[1] = re.sub('[,;]', '', tmp[1])
-                self.configs[tmp[0]] = tmp[1]
-                #print("find_simple_config = ", tmp[1])
+                self.conf.set( 'simple', tmp[0], tmp[1] )
 
 
     def find_config(self, config_type):
@@ -228,18 +211,18 @@ class DHCP(QWidget):
 
             configs_key = tmp[0]               
             configs_key += ' ' + tmp[1]
-            configs_values = []
+            self.conf.add_section(configs_key)
             if config_type == 'subnet':
-                configs_values.append(tmp[3])
+                self.conf.set(configs_key, 'netmask', tmp[3])
+                count = 1
                 for i in range( 5, len(tmp), 3 ):
                     tmp[i] = re.sub('[,;"]', '', tmp[i])
                     tmp[i+1] = re.sub('[,;"]', '', tmp[i+1])
-                    configs_values.append(tmp[i])
-                    configs_values.append(tmp[i+1])
+                    self.conf.set(configs_key, "range{0}".format(count), "{0}, {1}".format(tmp[i], tmp[i+1]))
+                    count += 1
             elif config_type == 'hosts':
-                configs_values.append(tmp[4])
-                configs_values.append(tmp[6])
-            self.configs[configs_key] = configs_values
+                self.conf.set(configs_key, 'hardware ethernet', tmp[4])
+                self.conf.set(configs_key, 'fixed-address', tmp[6])
             self.data = self.data[ 0:clear_start-1 ] + self.data[ clear_end: ]
             match = re.search(search_str, self.data, flags=re.MULTILINE)
 
@@ -253,103 +236,81 @@ class DHCP(QWidget):
         else:
             print("DHCP config file read")
             with file_dhcp_config:
+                self.data = ''
+                self.dictLineEdit = {}
+                self.ClearWindow()
+                self.conf.clear()
+        
                 self.data = file_dhcp_config.read()
                 text_len = len(self.data)
-                self.configs.clear()
                 self.find_simple_config()
                 self.find_config('subnet')
                 self.find_config('hosts')
                 self.UIconfig()
                 QMessageBox.information(self, "DHCP configurator", "DHCP config file successfully read!", QMessageBox.Ok)
 
+
     def save_config(self):
-        if self.dictLineEdit:
-            try:
-                file_dhcp_config = open( self.pathConfigFile.text() , "w")
-            except IOError:
-                print("Error! DHCP config file does not exist")
-                QMessageBox.critical(self, "Error", "DHCP config file does not exist", QMessageBox.Ok)
-            else:
-                print("DHCP config file open for write")
-                with file_dhcp_config:
-                    already_write_configs = []
-                    _dict = self.dictLineEdit
-                    for key in _dict:
-                        if key in already_write_configs:# == None:
-                            continue
-                        
-                        if "option domain-name-servers" in key:
-                            count = 1
-                            file_dhcp_config.write("option domain-name-servers ")
-                            tmp_key = '{0}{1}'.format("option domain-name-servers", count)
-                            #print("data = {0}".format(tmp_key))
-                            
-                            while tmp_key in _dict.keys():
-                                if count != 1:
-                                    file_dhcp_config.write( ", " )
-                                    
-                                file_dhcp_config.write( _dict[tmp_key].text() )                                
-                                already_write_configs.append(tmp_key)
-                                count += 1
-                                tmp_key = '{0}{1}'.format("option domain-name-servers", count)
+        if len(self.conf.sections()) == 0:
+             print("Error! Configuration missing!")
+             QMessageBox.critical(self, "Error", "Configuration missing!", QMessageBox.Ok)
+             return
+        try:
+             file_dhcp_config = open( self.pathConfigFile.text() , "w")
+        except IOError:
+             print("Error! DHCP config file does not exist")
+             QMessageBox.critical(self, "Error", "DHCP config file does not exist", QMessageBox.Ok)
+        else:
+             print("DHCP config file open for write")        
+             with file_dhcp_config: 
+                  for section in self.conf.sections():
+                       if section == "simple":
+                            for item in self.conf.items(section):
+                                 value = section + " " + item[0]
+                                 file_dhcp_config.write("{0} {1};\n".format(item[0], self.dictLineEdit[value].text()))
+                                 
+                       elif section == "option domain-name-servers":
+                            file_dhcp_config.write("\noption domain-name-servers ")
+                            flag_first = True
+                            for item in self.conf.items(section):
+                                 value = section + " " + item[0]
+                                 if flag_first == None:
+                       	              file_dhcp_config.write(", {0}".format(self.dictLineEdit[value].text()))
+                                 else:
+                       	              file_dhcp_config.write("{0}".format(self.dictLineEdit[value].text()))
+                       	              flag_first = None
                             file_dhcp_config.write(";\n")
                             
-                        elif "subnet " in key:
-                            count = 1
-                            file_dhcp_config.write("\n" + key + " ")
-                            
-                            tmp_key = '{0} {1}'.format("netmask", key)
-                            if tmp_key in _dict.keys():
-                               file_dhcp_config.write( tmp_key.split(' ')[0]+" "+_dict[tmp_key].text() + " {\n" )
-                               already_write_configs.append(tmp_key)
-                               #print("print  = ", tmp_key.split(' ')[0]+" "+_dict[tmp_key].text())
-
-                            tmp_key = '{0} {1} {2}'.format("range", key, count)
-                            #print("data = {0}".format(tmp_key))
-                            while tmp_key in _dict.keys():
-                                tmp_str = "\t" + tmp_key.split(' ')[0] + " " + _dict[tmp_key].text()
-                                file_dhcp_config.write( tmp_str )
-                                already_write_configs.append(tmp_key)
-                                count += 1
-                                
-                                tmp_key = '{0} {1} {2}'.format("range", key, count)
-                                tmp_str = " " + _dict[tmp_key].text() + "\n"
-                                file_dhcp_config.write( tmp_str )
-                                already_write_configs.append(tmp_key)
-                                count += 1
-                                tmp_key = '{0} {1} {2}'.format("range", key, count)
+                       elif re.sub('[0-9. ]', '', str(section)) == "subnet":
+                            flag_first = True
+                            for item in self.conf.items(section):
+                                 if flag_first == True:
+                                      value = section + " " + item[0]
+                                      file_dhcp_config.write( "\n{0} netmask {1} {2}\n".format(section, self.dictLineEdit[value].text(), "{") )
+                                      flag_first = None
+                                 else:
+                                      value = section + " " + item[0] + str(1)
+                                      file_dhcp_config.write(" range {0} ".format(self.dictLineEdit[value].text()) )
+                                      value = section + " " + item[0] + str(2)
+                                      file_dhcp_config.write( self.dictLineEdit[value].text() + "\n" )
+                            file_dhcp_config.write("};\n")
+                       elif "host " in section:
+                            file_dhcp_config.write( "\n{0} {1}\n".format(section, "{") )
+                            for item in self.conf.items(section):
+                                parametr = section + " " + item[0]
+                                value = self.dictLineEdit[parametr].text()
+                                file_dhcp_config.write( "   {0} {1}\n".format(item[0], value) )
                             file_dhcp_config.write( "}\n" )
-                            
-                        elif "host " in key:
-                            count = 1
-                            file_dhcp_config.write("\n" + key + " {\n")
-                            
-                            tmp_key = '{0} {1}'.format("hardware ethernet", key)
-                            if tmp_key in _dict.keys():
-                               file_dhcp_config.write( "\t" + tmp_key.split(' ')[0] + " " + tmp_key.split(' ')[1] +" "+_dict[tmp_key].text() + ";\n" )
-                               already_write_configs.append(tmp_key)
-                               #print("print  = ", tmp_key.split(' ')[0]+" "+_dict[tmp_key].text() + ";\n")
 
-                            tmp_key = '{0} {1}'.format("fixed-address", key)
-                            if tmp_key in _dict.keys():
-                               file_dhcp_config.write( "\t" + tmp_key.split(' ')[0]+" "+_dict[tmp_key].text() + ";\n" )
-                               already_write_configs.append(tmp_key)
-                               #print("print  = ", tmp_key.split(' ')[0]+" "+_dict[tmp_key].text() + ";\n")
-                            file_dhcp_config.write( "}\n" )
-                        else:
-                            file_dhcp_config.write(key + " " + self.dictLineEdit[key].text() + ";\n")
-                print("DHCP config file successfully write")
-                if os.system("service isc-dhcp-server restart") == 0:
-                    QMessageBox.information(self, "DHCP configurator", "DHCP config file success write\nDHCP-server restart!", QMessageBox.Ok)
-                else:
-                    QMessageBox.critical(self, "Error", "DHCP config file success write,\n but DHCP-server is not restarted!", QMessageBox.Ok)
-        else:
-            print("Error! Configuration missing!")
-            QMessageBox.critical(self, "Error", "Configuration missing!", QMessageBox.Ok)
-                        
+                  print("DHCP config file successfully write")
+                  if os.system("service {0} restart".format(self.dhcpServiceName.text())) == 0:
+                       QMessageBox.information(self, "DHCP configurator", "DHCP config file success write\nDHCP-server restart!", QMessageBox.Ok)
+                  else:
+                       QMessageBox.critical(self, "Error", "DHCP config file success write,\n but DHCP-server is not restarted!", QMessageBox.Ok)
+
 
 if __name__ == '__main__':
-
     app = QApplication(sys.argv)
     ex = DHCP()
     sys.exit(app.exec_())
+
